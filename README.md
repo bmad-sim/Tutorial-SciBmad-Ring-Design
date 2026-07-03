@@ -105,9 +105,7 @@ Pkg.instantiate()
 ```
 
 The `[compat]` bounds record the package versions the notebooks were last run
-against. (Individual notebooks still contain `Pkg.add` cells from an earlier
-per-chapter setup; with the shared environment activated these are redundant and
-can be skipped.)
+against.
 
 Then start JupyterLab from the project root so the relative paths used in the
 notebooks stay valid.
