@@ -120,34 +120,34 @@ function transverse_blocks(M)
     return M[1:2, 1:2], M[3:4, 3:4]
 end
 
-struct Twiss
+struct PlaneTwiss
     beta
     alpha
 end
 
-gamma(t::Twiss) = (1 + t.alpha^2) / t.beta
+twiss_gamma(t::PlaneTwiss) = (1 + t.alpha^2) / t.beta
 
-function sigma_matrix(t::Twiss)
+function sigma_matrix(t::PlaneTwiss)
     return [
         t.beta -t.alpha
-        -t.alpha gamma(t)
+        -t.alpha twiss_gamma(t)
     ]
 end
 
 function twiss_from_sigma(S)
-    return Twiss(S[1, 1], -S[1, 2])
+    return PlaneTwiss(S[1, 1], -S[1, 2])
 end
 
-function propagate_twiss(t::Twiss, M)
+function propagate_twiss(t::PlaneTwiss, M)
     return twiss_from_sigma(M * sigma_matrix(t) * transpose(M))
 end
 
-function periodic_twiss_from_matrix(M)
+function periodic_plane_twiss_from_matrix(M)
     cos_mu = tr(M) / 2
     abs(cos_mu) < 1 || error("Unstable one-cell matrix: |Tr(M)/2| >= 1")
     sin_mu = sqrt(1 - cos_mu^2)
     M[1, 2] / sin_mu < 0 && (sin_mu = -sin_mu)
-    return Twiss(M[1, 2] / sin_mu, (M[1, 1] - M[2, 2]) / (2sin_mu))
+    return PlaneTwiss(M[1, 2] / sin_mu, (M[1, 1] - M[2, 2]) / (2sin_mu))
 end
 
 M_suppressor = transfer_matrix_gtpsa(build_reverse_suppressor())
@@ -165,16 +165,20 @@ function build_reverse_arc_fodo()
     )
 end
 
-Mx_arc, My_arc = transverse_blocks(transfer_matrix_gtpsa(build_reverse_arc_fodo()))
-arc_x = periodic_twiss_from_matrix(Mx_arc)
-arc_y = periodic_twiss_from_matrix(My_arc)
+tw_arc = twiss(
+    build_reverse_arc_fodo();
+    cols=["beta1", "alpha1", "beta2", "alpha2"],
+    damping=false,
+)
+arc_x = PlaneTwiss(tw_arc.beta1[1], tw_arc.alpha1[1])
+arc_y = PlaneTwiss(tw_arc.beta2[1], tw_arc.alpha2[1])
 input_x = propagate_twiss(arc_x, Mx_suppressor)
 input_y = propagate_twiss(arc_y, My_suppressor)
 
 # The target is the periodic Twiss solution of the reverse straight FODO.
 Mx_ss, My_ss = transverse_blocks(transfer_matrix_gtpsa(build_reverse_straight_fodo()))
-target_x = periodic_twiss_from_matrix(Mx_ss)
-target_y = periodic_twiss_from_matrix(My_ss)
+target_x = periodic_plane_twiss_from_matrix(Mx_ss)
+target_y = periodic_plane_twiss_from_matrix(My_ss)
 
 const d_mssr_knobs = Descriptor(6, 2, 4, 1)
 const dk_mssr_R = params(d_mssr_knobs)

@@ -99,21 +99,26 @@ println("Constructed the Chapter 6 ring with the low-beta IR.")
 println("  IP6 marker count:       ", count(ele -> ele.name == "IP6", ring_with_ir_elements))
 
 println("\nCalculating the periodic optics of the ring with the IR...")
-tw_ring_with_ir = twiss(ring_with_ir)
+tw_ring_with_ir = twiss(
+    ring_with_ir;
+    cols=["beta1", "alpha1", "beta2", "alpha2"],
+)
 println("Periodic full-ring Twiss calculation completed.")
 
-# The Twiss table contains the entrance point followed by one row after each element. Therefore, the row immediately after the IP6 marker is index + 1.
+# SciBmad 0.5 returns Twiss(summ, df). The `index` column identifies the
+# beamline element at each saved entrance point, including zero-length markers.
 ip_element_index = findfirst(ele -> ele.name == "IP6", ring_with_ir_elements)
-ip_table_index = ip_element_index + 1
+ip_table_index = findfirst(==(ip_element_index), tw_ring_with_ir.index)
+isnothing(ip_table_index) && error("IP6 is missing from the Twiss DataFrame")
 
 println("\nPeriodic full-ring Twiss at IP6:")
 @printf(
-    "  beta_1 = %.12f, alpha_1 = %.3e\n",
-    tw_ring_with_ir.beta_1[ip_table_index],
-    tw_ring_with_ir.alpha_1[ip_table_index],
+    "  beta1 = %.12f, alpha1 = %.3e\n",
+    tw_ring_with_ir.beta1[ip_table_index],
+    tw_ring_with_ir.alpha1[ip_table_index],
 )
 @printf(
-    "  beta_2 = %.12f, alpha_2 = %.3e\n",
-    tw_ring_with_ir.beta_2[ip_table_index],
-    tw_ring_with_ir.alpha_2[ip_table_index],
+    "  beta2 = %.12f, alpha2 = %.3e\n",
+    tw_ring_with_ir.beta2[ip_table_index],
+    tw_ring_with_ir.alpha2[ip_table_index],
 )

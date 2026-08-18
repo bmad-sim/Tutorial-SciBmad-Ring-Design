@@ -4,14 +4,6 @@
 # Twiss coordinates used to build the map. The phase inputs dnu_x and dnu_y are
 # phase advances in radians, not tune units.
 
-function _trombone_pz_coeff(x)
-    try
-        return x[6]
-    catch
-        return zero(x)
-    end
-end
-
 function _trombone_beamline_index(element, ring)
     for (idx, candidate) in enumerate(ring.line)
         candidate === element && return idx
@@ -23,15 +15,23 @@ end
 function _trombone_twiss_row(element, ring, twiss_table)
     idx = _trombone_beamline_index(element, ring)
 
-    if hasproperty(twiss_table, :beamline_index)
-        row = findfirst(==(idx), twiss_table.beamline_index)
-        row !== nothing && return row
-    end
-
-    return idx
+    hasproperty(twiss_table, :index) || error("Twiss DataFrame has no index column.")
+    row = findfirst(==(idx), twiss_table.index)
+    row !== nothing && return row
+    error("Trombone element is missing from the Twiss DataFrame.")
 end
 
 function _trombone_apply_6x6(M, v)
+    if size(M) == (4, 4)
+        return (
+            M[1, 1] * v[1] + M[1, 2] * v[2] + M[1, 3] * v[3] + M[1, 4] * v[4],
+            M[2, 1] * v[1] + M[2, 2] * v[2] + M[2, 3] * v[3] + M[2, 4] * v[4],
+            M[3, 1] * v[1] + M[3, 2] * v[2] + M[3, 3] * v[3] + M[3, 4] * v[4],
+            M[4, 1] * v[1] + M[4, 2] * v[2] + M[4, 3] * v[3] + M[4, 4] * v[4],
+            v[5], v[6],
+        )
+    end
+    size(M) == (6, 6) || error("Trombone map must be 4x4 or 6x6.")
     return (
         M[1, 1] * v[1] + M[1, 2] * v[2] + M[1, 3] * v[3] + M[1, 4] * v[4] + M[1, 5] * v[5] + M[1, 6] * v[6],
         M[2, 1] * v[1] + M[2, 2] * v[2] + M[2, 3] * v[3] + M[2, 4] * v[4] + M[2, 5] * v[5] + M[2, 6] * v[6],
@@ -45,8 +45,9 @@ end
 function _trombone_check_6x6_modes(H, B)
     length(H) >= 2 || error("De Moivre trombone needs at least two normal modes in H.")
     length(B) >= 2 || error("De Moivre trombone needs at least two normal modes in B.")
-    size(H[1]) == (6, 6) || error("De Moivre trombone expects 6x6 H matrices.")
-    size(B[1]) == (6, 6) || error("De Moivre trombone expects 6x6 B matrices.")
+    size(H[1]) in ((4, 4), (6, 6)) || error("De Moivre trombone expects 4x4 or 6x6 H matrices.")
+    all(size(matrix) == size(H[1]) for matrix in (H..., B...)) ||
+        error("All De Moivre matrices must have the same size.")
     return nothing
 end
 
@@ -103,14 +104,14 @@ function trombone_params(element, ring, twiss_table, dnu_x, dnu_y)
     return (
         dnu_x,
         dnu_y,
-        twiss_table.beta_1[idx],
-        twiss_table.alpha_1[idx],
-        twiss_table.beta_2[idx],
-        twiss_table.alpha_2[idx],
-        _trombone_pz_coeff(twiss_table.orbit_x[idx]),
-        _trombone_pz_coeff(twiss_table.orbit_px[idx]),
-        _trombone_pz_coeff(twiss_table.orbit_y[idx]),
-        _trombone_pz_coeff(twiss_table.orbit_py[idx]),
+        twiss_table.beta1[idx],
+        twiss_table.alpha1[idx],
+        twiss_table.beta2[idx],
+        twiss_table.alpha2[idx],
+        twiss_table.dx[idx],
+        twiss_table.dpx[idx],
+        twiss_table.dy[idx],
+        twiss_table.dpy[idx],
     )
 end
 
@@ -121,8 +122,8 @@ function attach_trombone!(element, ring, twiss_table, dnu_x, dnu_y)
 end
 
 function attach_trombone!(element, ring, dnu_x, dnu_y; twiss_kwargs...)
-    tw = twiss(ring; twiss_kwargs...)
-    return attach_trombone!(element, ring, tw.table, dnu_x, dnu_y)
+    tw = twiss(ring; cols=["beta1", "alpha1", "beta2", "alpha2", "dx", "dpx", "dy", "dpy"], twiss_kwargs...)
+    return attach_trombone!(element, ring, tw.df, dnu_x, dnu_y)
 end
 
 function de_moivre_trombone_matrix(H, B, dnu_1, dnu_2; sin_sign=1)
@@ -146,8 +147,8 @@ end
 
 function de_moivre_trombone_params(element, ring, twiss_table, dnu_1, dnu_2; sin_sign=1)
     row = _trombone_twiss_row(element, ring, twiss_table)
-    H = Tuple(twiss_table.H[row])
-    B = Tuple(twiss_table.B[row])
+    H = (twiss_table.H1[row], twiss_table.H2[row])
+    B = (twiss_table.B1[row], twiss_table.B2[row])
     _trombone_check_6x6_modes(H, B)
     return (dnu_1, dnu_2, H, B, sin_sign)
 end
@@ -166,17 +167,17 @@ function attach_de_moivre_trombone!(element, ring, twiss_table, dnu_1, dnu_2; si
 end
 
 function attach_de_moivre_trombone!(element, ring, dnu_1, dnu_2; sin_sign=1, twiss_kwargs...)
-    tw = twiss(ring; de_moivre=true, twiss_kwargs...)
-    return attach_de_moivre_trombone!(element, ring, tw.table, dnu_1, dnu_2; sin_sign=sin_sign)
+    tw = twiss(ring; cols=["H1", "H2", "B1", "B2"], twiss_kwargs...)
+    return attach_de_moivre_trombone!(element, ring, tw.df, dnu_1, dnu_2; sin_sign=sin_sign)
 end
 
 const attach_coupled_trombone! = attach_de_moivre_trombone!
 
 function attach_de_moivre_trombones!(ring, trombones; sin_sign=1, twiss_kwargs...)
-    tw = twiss(ring; de_moivre=true, twiss_kwargs...)
+    tw = twiss(ring; cols=["H1", "H2", "B1", "B2"], twiss_kwargs...)
 
     for (element, dnu_1, dnu_2) in trombones
-        attach_de_moivre_trombone!(element, ring, tw.table, dnu_1, dnu_2; sin_sign=sin_sign)
+        attach_de_moivre_trombone!(element, ring, tw.df, dnu_1, dnu_2; sin_sign=sin_sign)
     end
 
     return ring

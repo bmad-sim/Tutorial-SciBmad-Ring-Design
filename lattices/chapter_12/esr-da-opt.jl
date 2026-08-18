@@ -184,8 +184,8 @@ for i in 1:2:length(sfs_11)-1
 end
 
 # Mark phase trombone locations. make_trombones! will later find all elements
-# with kind == "Trombone", compute one reference twiss with normalizing_map=true,
-# and capture the local A matrices in each element's transport_map closure.
+# with kind == "Trombone", compute one reference twiss with cols=["N"],
+# and capture the local transverse normalizing matrices in each map closure.
 trombone_specs = [
     (mlrf_6, DefExpr(()->CONTROLS.dnux_mlrf_6), DefExpr(()->CONTROLS.dnuy_mlrf_6)),
     (mlrr_6, DefExpr(()->CONTROLS.dnux_mlrr_6), DefExpr(()->CONTROLS.dnuy_mlrr_6)),
@@ -208,8 +208,9 @@ using GTPSA
 # 6 arcs * 2 families * 2 planes = 24 families total 
 # So 22 families free, 2 fix chromaticity
 using GTPSA
-# First order all, first order parameter, 3rd order cross terms
-dchrom = Descriptor([1,1,1,1,1,1], 3, ones(Int, 24), 1)
+# The tune coefficient linear in delta needs second order in the longitudinal
+# phase-space variable. RF is disabled so delta remains a coasting-beam variable.
+dchrom = Descriptor([1,1,1,1,1,2], 3, ones(Int, 24), 1)
 p = params(dchrom)
 CONTROLS.dksf1_1  = p[1]
 CONTROLS.dksf2_1  = p[2]
@@ -238,9 +239,11 @@ CONTROLS.dksd1_11 = p[22]
 CONTROLS.dksf2_11 = p[23]
 CONTROLS.dksd2_11 = p[24]
 
-tw = twiss(ring; at=[],GTPSA_descriptor=dchrom)
-chromx_grad = GTPSA.gradient(par(tw.tunes[1], 6)[[0,0,0,0,0,0,:]], include_params=true)[7:end]
-chromy_grad = GTPSA.gradient(par(tw.tunes[2], 6)[[0,0,0,0,0,0,:]], include_params=true)[7:end]
+tw = twiss(ring; at=[], rf_on=false, cols=String[], GTPSA_descriptor=dchrom)
+chromx = tw.q1[delta=1, as_taylor_series=true]
+chromy = tw.q2[delta=1, as_taylor_series=true]
+chromx_grad = GTPSA.gradient(chromx, include_params=true)[7:end]
+chromy_grad = GTPSA.gradient(chromy, include_params=true)[7:end]
 Mfamilychrom = vcat(chromx_grad[1:end-2]', chromy_grad[1:end-2]')
 Mselfchrom = vcat(chromx_grad[end-1:end]', chromy_grad[end-1:end]')
 

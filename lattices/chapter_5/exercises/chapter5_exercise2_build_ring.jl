@@ -222,6 +222,5 @@ println("\nCalculating full-ring periodic optics...")
 tw_ring = twiss(ring)
 println("Full-ring twiss calculation completed.")
 
-twiss_table = hasproperty(tw_ring, :table) ? tw_ring.table : tw_ring
-@printf("  Mode-1 tune: %.12f\n", twiss_table.phi_1[end])
-@printf("  Mode-2 tune: %.12f\n", twiss_table.phi_2[end])
+@printf("  Mode-1 tune: %.12f\n", tw_ring.q1)
+@printf("  Mode-2 tune: %.12f\n", tw_ring.q2)

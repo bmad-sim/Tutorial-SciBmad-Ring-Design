@@ -1,10 +1,8 @@
 using LinearAlgebra: inv
 
-# Phase trombone utilities using SciBmad's normalizing map `a`.
-#
-# This version assumes twiss(...; normalizing_map=true) stores a normalizing map
-# at each element. The trombone matrix is built as
-# A * R(dphi_1, dphi_2, dphi_3) * A^-1.
+# Phase trombone utilities using SciBmad's transverse normalizing matrix `N`.
+# SciBmad 0.5 returns N as a 4x4 matrix. The trombone acts on the transverse
+# coordinates and passes z and pz through unchanged.
 
 function load_ring(path; make_trombones=false, kwargs...)
     ring = include(path)
@@ -32,14 +30,9 @@ function _normalizing_map_property(x, name, default=nothing)
     end
 end
 
-function _normalizing_map_trombone_beamline_index(element, ring)
+function _normalizing_map_trombone_element_index(element, ring)
     for (idx, candidate) in enumerate(ring.line)
         candidate === element && return idx
-    end
-
-    element_index = _normalizing_map_property(element, :beamline_index)
-    if element_index isa Integer && firstindex(ring.line) <= element_index <= lastindex(ring.line)
-        return element_index
     end
 
     element_name = _normalizing_map_property(element, :name)
@@ -55,79 +48,65 @@ function _normalizing_map_trombone_beamline_index(element, ring)
 end
 
 function _normalizing_map_trombone_ring_element(element, ring)
-    return ring.line[_normalizing_map_trombone_beamline_index(element, ring)]
+    return ring.line[_normalizing_map_trombone_element_index(element, ring)]
 end
 
 function _normalizing_map_trombone_twiss_row(element, ring, twiss_table)
-    idx = _normalizing_map_trombone_beamline_index(element, ring)
+    idx = _normalizing_map_trombone_element_index(element, ring)
 
-    if hasproperty(twiss_table, :beamline_index)
-        row = findfirst(==(idx), twiss_table.beamline_index)
-        row !== nothing && return row
-    end
-
-    return idx
+    hasproperty(twiss_table, :index) || error("Twiss DataFrame has no index column.")
+    row = findfirst(==(idx), twiss_table.index)
+    row !== nothing && return row
+    error("Trombone element is missing from the Twiss DataFrame.")
 end
 
 function _normalizing_map_twiss(ring; twiss_kwargs...)
-    try
-        return twiss(ring; normalizing_map=true, twiss_kwargs...)
-    catch err
-        if err isa MethodError
-            error(
-                "twiss(...; normalizing_map=true) is not supported by this SciBmad version. " *
-                "Update SciBmad to a version with the normalizing_map keyword, or pass a " *
-                "twiss_table that already contains an `a` column."
-            )
-        end
-        rethrow()
-    end
+    return twiss(ring; cols=["N"], twiss_kwargs...)
 end
 
 function _normalizing_map_from_table(twiss_table, row)
-    if hasproperty(twiss_table, :a)
-        return twiss_table.a[row]
+    if hasproperty(twiss_table, :N)
+        return twiss_table.N[row]
     end
 
     error(
-        "Twiss table has no `a` column. Compute twiss with normalizing_map=true."
+        "Twiss table has no `N` column. Compute twiss with cols=[\"N\"]."
     )
 end
 
-function _normalizing_map_linear_matrix(a)
-    if a isa AbstractMatrix
-        return Matrix(a)
+function _normalizing_map_linear_matrix(N)
+    if N isa AbstractMatrix
+        return Matrix(N)
     end
 
     try
-        return Matrix(jacobian(a, SciBmad.NNF.VARS_CPARAM))
+        return Matrix(jacobian(N, SciBmad.NNF.VARS_CPARAM))
     catch
         try
-            return Matrix(jacobian(a))
+            return Matrix(jacobian(N))
         catch err
-            error("Could not convert the normalizing map `a` into a 6x6 matrix: $err")
+            error("Could not convert the normalizing matrix `N` into a 4x4 matrix: $err")
         end
     end
 end
 
-function _normalizing_map_check_6x6(A)
-    size(A) == (6, 6) || error("Normalizing-map trombone expects a 6x6 A matrix.")
+function _normalizing_map_check(A)
+    size(A) == (4, 4) || error("Normalizing-map trombone expects SciBmad's 4x4 N matrix.")
     return nothing
 end
 
 function normalizing_map_trombone_rotation(dphi_1, dphi_2, dphi_3, sample; sin_sign=1)
+    iszero(dphi_3) || error("SciBmad's N column is transverse; dphi_3 must be zero.")
     c1 = cos(dphi_1)
     s1 = sin_sign * sin(dphi_1)
     c2 = cos(dphi_2)
     s2 = sin_sign * sin(dphi_2)
-    c3 = cos(dphi_3)
-    s3 = sin_sign * sin(dphi_3)
 
     one_entry = one(sample) * one(c1)
     zero_entry = zero(one_entry)
-    R = fill(zero_entry, 6, 6)
+    R = fill(zero_entry, 4, 4)
 
-    for i in 1:6
+    for i in 1:4
         R[i, i] = one_entry
     end
 
@@ -141,53 +120,48 @@ function normalizing_map_trombone_rotation(dphi_1, dphi_2, dphi_3, sample; sin_s
     R[4, 3] = -s2
     R[4, 4] = c2
 
-    R[5, 5] = c3
-    R[5, 6] = s3
-    R[6, 5] = -s3
-    R[6, 6] = c3
-
     return R
 end
 
-function normalizing_map_trombone_matrix(A, dphi_1, dphi_2, dphi_3=0.0; sin_sign=1)
-    _normalizing_map_check_6x6(A)
+function normalizing_map_trombone_matrix(A::AbstractMatrix, dphi_1, dphi_2, dphi_3=0.0; sin_sign=1)
+    _normalizing_map_check(A)
     R = normalizing_map_trombone_rotation(dphi_1, dphi_2, dphi_3, A[1, 1]; sin_sign=sin_sign)
     return A * R * inv(A)
 end
 
-function normalizing_map_trombone_matrix(A, Ainv, dphi_1, dphi_2, dphi_3=0.0; sin_sign=1)
-    _normalizing_map_check_6x6(A)
-    _normalizing_map_check_6x6(Ainv)
+function normalizing_map_trombone_matrix(A::AbstractMatrix, Ainv::AbstractMatrix, dphi_1, dphi_2, dphi_3=0.0; sin_sign=1)
+    _normalizing_map_check(A)
+    _normalizing_map_check(Ainv)
     R = normalizing_map_trombone_rotation(dphi_1, dphi_2, dphi_3, A[1, 1]; sin_sign=sin_sign)
     return A * R * Ainv
 end
 
-function _normalizing_map_trombone_apply_6x6(M, v)
+function _normalizing_map_trombone_apply(M, v)
     return (
-        M[1, 1] * v[1] + M[1, 2] * v[2] + M[1, 3] * v[3] + M[1, 4] * v[4] + M[1, 5] * v[5] + M[1, 6] * v[6],
-        M[2, 1] * v[1] + M[2, 2] * v[2] + M[2, 3] * v[3] + M[2, 4] * v[4] + M[2, 5] * v[5] + M[2, 6] * v[6],
-        M[3, 1] * v[1] + M[3, 2] * v[2] + M[3, 3] * v[3] + M[3, 4] * v[4] + M[3, 5] * v[5] + M[3, 6] * v[6],
-        M[4, 1] * v[1] + M[4, 2] * v[2] + M[4, 3] * v[3] + M[4, 4] * v[4] + M[4, 5] * v[5] + M[4, 6] * v[6],
-        M[5, 1] * v[1] + M[5, 2] * v[2] + M[5, 3] * v[3] + M[5, 4] * v[4] + M[5, 5] * v[5] + M[5, 6] * v[6],
-        M[6, 1] * v[1] + M[6, 2] * v[2] + M[6, 3] * v[3] + M[6, 4] * v[4] + M[6, 5] * v[5] + M[6, 6] * v[6],
+        M[1, 1] * v[1] + M[1, 2] * v[2] + M[1, 3] * v[3] + M[1, 4] * v[4],
+        M[2, 1] * v[1] + M[2, 2] * v[2] + M[2, 3] * v[3] + M[2, 4] * v[4],
+        M[3, 1] * v[1] + M[3, 2] * v[2] + M[3, 3] * v[3] + M[3, 4] * v[4],
+        M[4, 1] * v[1] + M[4, 2] * v[2] + M[4, 3] * v[3] + M[4, 4] * v[4],
+        v[5],
+        v[6],
     )
 end
 
 function normalizing_map_trombone_map(A; sin_sign=1)
-    _normalizing_map_check_6x6(A)
+    _normalizing_map_check(A)
     Ainv = inv(A)
 
     return function (v, q, params)
         dnu1, dnu2, dnu3 = _normalizing_map_trombone_param_tuple(params)
         M = normalizing_map_trombone_matrix(A, Ainv, dnu1, dnu2, dnu3; sin_sign=sin_sign)
-        return (_normalizing_map_trombone_apply_6x6(M, v), q)
+        return (_normalizing_map_trombone_apply(M, v), q)
     end
 end
 
 function normalizing_map_trombone_A(element, ring, twiss_table)
     row = _normalizing_map_trombone_twiss_row(element, ring, twiss_table)
     A = _normalizing_map_linear_matrix(_normalizing_map_from_table(twiss_table, row))
-    _normalizing_map_check_6x6(A)
+    _normalizing_map_check(A)
     return A
 end
 
@@ -220,7 +194,7 @@ end
 function mark_trombone!(element, ring, dnu1, dnu2; dnu3=0.0)
     mark_trombone!(element, dnu1, dnu2; dnu3=dnu3)
 
-    idx = _normalizing_map_trombone_beamline_index(element, ring)
+    idx = _normalizing_map_trombone_element_index(element, ring)
     ring_element = ring.line[idx]
     mark_trombone!(ring_element, dnu1, dnu2; dnu3=dnu3)
     return ring_element
@@ -255,7 +229,7 @@ end
 
 function make_trombone!(element, ring; sin_sign=1, twiss_kwargs...)
     tw = _normalizing_map_twiss(ring; twiss_kwargs...)
-    return make_trombone!(element, ring, tw.table; sin_sign=sin_sign)
+    return make_trombone!(element, ring, tw.df; sin_sign=sin_sign)
 end
 
 function _make_trombone_from_spec!(ring, twiss_table, element; sin_sign=1)
@@ -278,7 +252,7 @@ function make_trombones!(ring, trombones; sin_sign=1, twiss_kwargs...)
     tw = _normalizing_map_twiss(ring; twiss_kwargs...)
 
     for trombone in trombones
-        _make_trombone_from_spec!(ring, tw.table, trombone; sin_sign=sin_sign)
+        _make_trombone_from_spec!(ring, tw.df, trombone; sin_sign=sin_sign)
     end
 
     return ring

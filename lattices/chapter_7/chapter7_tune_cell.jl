@@ -150,7 +150,8 @@ function build_ring_with_tune_cell(k; knobs=nothing)
     return ring, elements
 end
 
-optics_table(tw) = hasproperty(tw, :table) ? tw.table : tw
+optics_table(tw) = tw.df
+const TUNE_TWISS_COLS = ["beta1", "alpha1", "beta2", "alpha2", "phi1", "phi2"]
 
 const zero6 = [0, 0, 0, 0, 0, 0]
 
@@ -164,48 +165,55 @@ end
 
 parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
 
+function center_qfss_rows(tw, elements)
+    qf_indices = findall(ele -> ele.name == "QFSS_2", elements)
+    length(qf_indices) == 9 || error("Expected nine QFSS_2 elements.")
+    row4 = findfirst(==(qf_indices[4]), tw.index)
+    row5 = findfirst(==(qf_indices[5]), tw.index)
+    (isnothing(row4) || isnothing(row5)) &&
+        error("Center QFSS_2 elements are missing from the Twiss DataFrame.")
+    return row4, row5
+end
+
 function straight_cell_phase_advances(k)
     # Read the phase advance across one center FODO period from the complete
     # stable ring. Calling twiss on an isolated no-bend cell can leave the
     # longitudinal normal form degenerate even when its transverse motion is
     # stable.
     ring, elements = build_ring_with_tune_cell(k)
-    table = optics_table(twiss(ring))
-    qf_indices = findall(ele -> ele.name == "QFSS_2", elements)
-    row4 = qf_indices[4] + 1
-    row5 = qf_indices[5] + 1
+    tw = twiss(ring; cols=TUNE_TWISS_COLS)
+    row4, row5 = center_qfss_rows(tw, elements)
     return 360 .* tps_const.([
-        table.phi_1[row5] - table.phi_1[row4],
-        table.phi_2[row5] - table.phi_2[row4],
+        tw.phi1[row5] - tw.phi1[row4],
+        tw.phi2[row5] - tw.phi2[row4],
     ])
 end
 
 function tune_cell_metrics(k; knobs=nothing, descriptor=nothing, constants=true)
     ring, elements = build_ring_with_tune_cell(k; knobs=knobs)
-    tw = isnothing(descriptor) ? twiss(ring) : twiss(ring, GTPSA_descriptor=descriptor)
-    table = optics_table(tw)
-
+    tw = isnothing(descriptor) ?
+        twiss(ring; cols=TUNE_TWISS_COLS) :
+        twiss(ring; cols=TUNE_TWISS_COLS, GTPSA_descriptor=descriptor)
     # The fourth and fifth QFSS_2 magnets are one FODO period apart at the
     # center. Equal Twiss values at these locations enforce local periodicity.
-    qf_indices = findall(ele -> ele.name == "QFSS_2", elements)
-    length(qf_indices) == 9 || error("Expected nine QFSS_2 elements.")
-    row4 = qf_indices[4] + 1
-    row5 = qf_indices[5] + 1
+    row4, row5 = center_qfss_rows(tw, elements)
 
     periodicity = [
-        (table.beta_1[row4] - table.beta_1[row5]) / table.beta_1[row5],
-        table.alpha_1[row4] - table.alpha_1[row5],
-        (table.beta_2[row4] - table.beta_2[row5]) / table.beta_2[row5],
-        table.alpha_2[row4] - table.alpha_2[row5],
+        (tw.beta1[row4] - tw.beta1[row5]) / tw.beta1[row5],
+        tw.alpha1[row4] - tw.alpha1[row5],
+        (tw.beta2[row4] - tw.beta2[row5]) / tw.beta2[row5],
+        tw.alpha2[row4] - tw.alpha2[row5],
     ]
-    tunes = [table.phi_1[end], table.phi_2[end]]
+    tunes = isnothing(descriptor) ?
+        [tw.q1[], tw.q2[]] :
+        [tw.q1[as_taylor_series=true], tw.q2[as_taylor_series=true]]
 
     if constants
         periodicity = tps_const.(periodicity)
         tunes = tps_const.(tunes)
     end
 
-    return (periodicity=periodicity, tunes=tunes, table=table, elements=elements)
+    return (periodicity=periodicity, tunes=tunes)
 end
 
 function tune_cell_residual(k)
@@ -245,7 +253,12 @@ function damped_least_squares(
         J = jacobian(x)
         step = -(J' * J + lambda * I) \ (J' * r)
         trial = x + step
-        merit_trial = sum(abs2, f(trial))
+        merit_trial = try
+            sum(abs2, f(trial))
+        catch err
+            @printf("  rejected invalid trial (%s)\n", string(nameof(typeof(err))))
+            Inf
+        end
 
         @printf(
             "iter %2d  merit = %.6e  step = %.3e  lambda = %.3e\n",

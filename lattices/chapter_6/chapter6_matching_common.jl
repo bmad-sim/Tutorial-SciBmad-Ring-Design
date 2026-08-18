@@ -94,23 +94,24 @@ function concrete_matrix(M)
     return Matrix{T}(M)
 end
 
-# Minimal uncoupled Twiss representation used by the Chapter 6 matches.
-struct Twiss
+# Minimal uncoupled Twiss representation used by the Chapter 6 matches. Keep
+# this distinct from SciBmad.Twiss, which is the public `twiss` result type.
+struct PlaneTwiss
     beta
     alpha
 end
 
-gamma(t::Twiss) = (1 + t.alpha^2) / t.beta
+gamma(t::PlaneTwiss) = (1 + t.alpha^2) / t.beta
 
-function sigma_matrix(t::Twiss)
+function sigma_matrix(t::PlaneTwiss)
     return [
         t.beta -t.alpha
         -t.alpha gamma(t)
     ]
 end
 
-twiss_from_sigma(S) = Twiss(S[1, 1], -S[1, 2])
-propagate_twiss(t::Twiss, M) = twiss_from_sigma(M * sigma_matrix(t) * transpose(M))
+twiss_from_sigma(S) = PlaneTwiss(S[1, 1], -S[1, 2])
+propagate_twiss(t::PlaneTwiss, M) = twiss_from_sigma(M * sigma_matrix(t) * transpose(M))
 
 function periodic_twiss_from_matrix(M)
     # Choose the phase-advance branch that gives a positive periodic beta.
@@ -118,7 +119,7 @@ function periodic_twiss_from_matrix(M)
     abs(cos_mu) < 1 || error("Unstable one-cell matrix: |Tr(M)/2| >= 1")
     sin_mu = sqrt(1 - cos_mu^2)
     M[1, 2] / sin_mu < 0 && (sin_mu = -sin_mu)
-    return Twiss(M[1, 2] / sin_mu, (M[1, 1] - M[2, 2]) / (2sin_mu))
+    return PlaneTwiss(M[1, 2] / sin_mu, (M[1, 1] - M[2, 2]) / (2sin_mu))
 end
 
 function periodic_twiss(beamline)
@@ -238,8 +239,8 @@ function damped_least_squares_with_history(
     return x, history, converged
 end
 
-const target_a = Twiss(0.6, 0.0)
-const target_b = Twiss(0.06, 0.0)
+const target_a = PlaneTwiss(0.6, 0.0)
+const target_b = PlaneTwiss(0.06, 0.0)
 
 function normalized_ip_residual(output_a, output_b)
     # Normalize beta errors by their targets so the two planes have comparable
