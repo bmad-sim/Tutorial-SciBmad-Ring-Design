@@ -5,8 +5,8 @@ using Statistics
 function chapter15_find_file(parts...)
     candidates = [
         joinpath(pwd(), parts...),
-        joinpath(pwd(), "Ring_Design_Tutorial_SciBmad", parts...),
-        joinpath(dirname(pwd()), "Ring_Design_Tutorial_SciBmad", parts...),
+        joinpath(pwd(), "Tutorial-SciBmad", parts...),
+        joinpath(dirname(pwd()), "Tutorial-SciBmad", parts...),
     ]
 
     for candidate in candidates

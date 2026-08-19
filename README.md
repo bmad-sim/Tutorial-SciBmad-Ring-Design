@@ -1,9 +1,9 @@
-# SciBmad Ring Design Tutorial
+# SciBmad Tutorial
 
-A ring design tutorial in SciBmad/Julia.
+`Tutorial-SciBmad` is a hands-on introduction to accelerator modeling,
+simulation, and optimization with SciBmad and Julia.
 
-This tutorial introduces SciBmad for the simulation and optimization of particle
-accelerators. The numbered Jupyter notebooks should be read in order. Together
+The numbered Jupyter notebooks should be read in order. Together
 they build an example storage ring similar to the Electron Storage Ring of the
 Electron-Ion Collider. The main tutorial text is followed by exercises, with
 example solutions provided for comparison. Readers are encouraged to try the

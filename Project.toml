@@ -1,4 +1,4 @@
-name = "TutorialSciBmadRingDesign"
+name = "TutorialSciBmad"
 
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
