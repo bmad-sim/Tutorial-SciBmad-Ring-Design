@@ -150,7 +150,6 @@ function build_ring_with_tune_cell(k; knobs=nothing)
     return ring, elements
 end
 
-optics_table(tw) = tw.df
 const TUNE_TWISS_COLS = ["beta1", "alpha1", "beta2", "alpha2", "phi1", "phi2"]
 
 const zero6 = [0, 0, 0, 0, 0, 0]
