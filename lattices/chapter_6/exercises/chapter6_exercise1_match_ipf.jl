@@ -52,7 +52,7 @@ function ipf_residual_jacobian(k)
     descriptor = Descriptor(6, 2, 4, 1)
     dk = params(descriptor)
     residual = ipf_residual_with_knobs(k, descriptor, dk)
-    return vcat((parameter_gradient(r)' for r in residual)...)
+    return jac(residual)
 end
 
 K_start = [K_ss, -K_ss, K_ss, -K_ss]

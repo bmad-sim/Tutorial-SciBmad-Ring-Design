@@ -5,18 +5,6 @@ using LinearAlgebra
 
 const TUNE_DESCRIPTOR = Descriptor(6, 2, 2, 1)
 const DK_TUNE = params(TUNE_DESCRIPTOR)
-const ZERO6 = [0, 0, 0, 0, 0, 0]
-
-function tps_const(x)
-    try
-        return x[ZERO6]
-    catch
-        return x
-    end
-end
-
-parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
-
 function sliced_drift(name, L, n)
     return [Drift(name=@sprintf("%s_%02d", name, i), L=L / n) for i in 1:n]
 end
@@ -56,7 +44,7 @@ function ring_tunes(k; knobs=nothing, descriptor=nothing, constants=true)
             tw.q2[as_taylor_series=true],
         ]
     end
-    return constants ? tps_const.(tunes) : tunes
+    return constants ? val.(tunes) : tunes
 end
 
 function tune_residual(k, target)
@@ -69,7 +57,7 @@ end
 
 function tune_jacobian(k, target)
     residual = tune_residual_with_knobs(k, target)
-    return vcat((parameter_gradient(r)' for r in residual)...)
+    return jac(residual)
 end
 
 function match_tunes(k0, target; max_iter=10, tolerance=1e-9)

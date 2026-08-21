@@ -75,9 +75,6 @@ function linear_map_with_descriptor(beamline, d; x0=zeros(6))
     return M
 end
 
-parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
-tps_const(x) = try x[zeros(Int, 6)] catch; x end
-
 function periodic_dispersion_from_map(M)
     A = M[1:2, 1:2]
     drive = M[1:2, 6]
@@ -92,7 +89,7 @@ end
 const d_suppressor_knobs = Descriptor(6, 2, 2, 1)
 const dk_suppressor_R = params(d_suppressor_knobs)
 
-M_arc_R = tps_const.(linear_map_with_descriptor(build_reverse_arc_fodo(), d_suppressor_knobs))
+M_arc_R = val.(linear_map_with_descriptor(build_reverse_arc_fodo(), d_suppressor_knobs))
 D_arc_R = periodic_dispersion_from_map(M_arc_R)
 
 function suppressor_end_dispersion_with_knobs(k)
@@ -105,12 +102,12 @@ end
 
 function suppressor_residual(k)
     Dend = suppressor_end_dispersion_with_knobs(k)
-    return tps_const.(Dend)
+    return val.(Dend)
 end
 
 function suppressor_residual_jacobian(k)
     Dend = suppressor_end_dispersion_with_knobs(k)
-    return vcat(parameter_gradient(Dend[1])', parameter_gradient(Dend[2])')
+    return jac(Dend)
 end
 
 function damped_least_squares(f, jacobian, x0; maxiter=40, tol=1e-12, lambda0=1e-3)

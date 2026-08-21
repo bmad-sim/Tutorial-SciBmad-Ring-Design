@@ -242,10 +242,9 @@ CONTROLS.dksd2_11 = p[24]
 tw = twiss(ring; at=[], rf_on=false, cols=String[], GTPSA_descriptor=dchrom)
 chromx = tw.q1[delta=1, as_taylor_series=true]
 chromy = tw.q2[delta=1, as_taylor_series=true]
-chromx_grad = GTPSA.gradient(chromx, include_params=true)[7:end]
-chromy_grad = GTPSA.gradient(chromy, include_params=true)[7:end]
-Mfamilychrom = vcat(chromx_grad[1:end-2]', chromy_grad[1:end-2]')
-Mselfchrom = vcat(chromx_grad[end-1:end]', chromy_grad[end-1:end]')
+chrom_jacobian = jac([chromx, chromy])
+Mfamilychrom = chrom_jacobian[:, 1:end-2]
+Mselfchrom = chrom_jacobian[:, end-1:end]
 
 # Reset controls back
 CONTROLS.dksf1_1  = 0.

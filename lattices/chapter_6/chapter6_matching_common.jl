@@ -84,9 +84,6 @@ function linear_map_with_descriptor(beamline, d; x0=zeros(6))
     return M
 end
 
-parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
-tps_const(x) = try x[zeros(Int, 6)] catch; x end
-
 transverse_blocks(M) = M[1:2, 1:2], M[3:4, 3:4]
 
 function concrete_matrix(M)

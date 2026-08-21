@@ -152,18 +152,6 @@ end
 
 const TUNE_TWISS_COLS = ["beta1", "alpha1", "beta2", "alpha2", "phi1", "phi2"]
 
-const zero6 = [0, 0, 0, 0, 0, 0]
-
-function tps_const(x)
-    try
-        return x[zero6]
-    catch
-        return x
-    end
-end
-
-parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
-
 function center_qfss_rows(tw, elements)
     qf_indices = findall(ele -> ele.name == "QFSS_2", elements)
     length(qf_indices) == 9 || error("Expected nine QFSS_2 elements.")
@@ -182,7 +170,7 @@ function straight_cell_phase_advances(k)
     ring, elements = build_ring_with_tune_cell(k)
     tw = twiss(ring; cols=TUNE_TWISS_COLS)
     row4, row5 = center_qfss_rows(tw, elements)
-    return 360 .* tps_const.([
+    return 360 .* val.([
         tw.phi1[row5] - tw.phi1[row4],
         tw.phi2[row5] - tw.phi2[row4],
     ])
@@ -208,8 +196,8 @@ function tune_cell_metrics(k; knobs=nothing, descriptor=nothing, constants=true)
         [tw.q1[as_taylor_series=true], tw.q2[as_taylor_series=true]]
 
     if constants
-        periodicity = tps_const.(periodicity)
-        tunes = tps_const.(tunes)
+        periodicity = val.(periodicity)
+        tunes = val.(tunes)
     end
 
     return (periodicity=periodicity, tunes=tunes)
@@ -232,7 +220,7 @@ end
 
 function tune_cell_residual_jacobian(k)
     residual = tune_cell_residual_with_knobs(k)
-    return vcat((parameter_gradient(r)' for r in residual)...)
+    return jac(residual)
 end
 
 function damped_least_squares(

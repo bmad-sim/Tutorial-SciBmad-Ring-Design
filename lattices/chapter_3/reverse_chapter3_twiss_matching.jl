@@ -113,9 +113,6 @@ function linear_map_with_descriptor(beamline, d; x0=zeros(6))
     return M
 end
 
-parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
-tps_const(x) = try x[zeros(Int, 6)] catch; x end
-
 function transverse_blocks(M)
     return M[1:2, 1:2], M[3:4, 3:4]
 end
@@ -195,11 +192,11 @@ function matching_residual_with_knobs(k)
     ]
 end
 
-matching_residual(k) = tps_const.(matching_residual_with_knobs(k))
+matching_residual(k) = val.(matching_residual_with_knobs(k))
 
 function residual_jacobian(k)
     residual = matching_residual_with_knobs(k)
-    return vcat((parameter_gradient(r)' for r in residual)...)
+    return jac(residual)
 end
 
 function damped_least_squares(f, x0; maxiter=60, tol=1e-12, lambda0=1e-3)
