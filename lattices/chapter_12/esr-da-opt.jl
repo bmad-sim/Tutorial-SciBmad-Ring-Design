@@ -1,5 +1,4 @@
 ring = include(joinpath(@__DIR__, "..", "common", "esr-main-18GeV-1IP.jl"))
-include(joinpath(@__DIR__, "normalizing_map_trombone_utils.jl"))
 
 @kwdef mutable struct Controls
     # These are Union{TPS64,Float64} bc
@@ -31,7 +30,7 @@ include(joinpath(@__DIR__, "normalizing_map_trombone_utils.jl"))
     dksf2_11::Union{TPS64,Float64} = 0. # COMPENSATOR HORIZONTAL CHROM, defined near end
     dksd2_11::Union{TPS64,Float64} = 0. # COMPENSATOR VERTICAL CHROM, defined near end
             
-    # Horizontal trombones:
+    # Horizontal phase-trombone tune shifts, in turns (1 turn = 2pi radians):
     dnux_mlrf_6::Union{TPS64,Float64} = 0. 
     dnux_mlrr_6::Union{TPS64,Float64} = 0. 
     dnux_ip8::Union{TPS64,Float64}    = 0. 
@@ -39,7 +38,7 @@ include(joinpath(@__DIR__, "normalizing_map_trombone_utils.jl"))
     dnux_ip12::Union{TPS64,Float64}   = 0. 
     dnux_ip2::Union{TPS64,Float64}    = 0. 
             
-    # Vertical trombones
+    # Vertical phase-trombone tune shifts, in turns (1 turn = 2pi radians):
     dnuy_mlrf_6::Union{TPS64,Float64} = 0. 
     dnuy_mlrr_6::Union{TPS64,Float64} = 0. 
     dnuy_ip8::Union{TPS64,Float64}    = 0. 
@@ -183,10 +182,9 @@ for i in 1:2:length(sfs_11)-1
     sfs_11[i+1].Kn2 = DefExpr(()->KSF+CONTROLS.dksf2_11)
 end
 
-# Mark phase trombone locations. make_trombones! will later find all elements
-# with kind == "Trombone", compute one reference twiss with cols=["N"],
-# and capture the local transverse normalizing matrices in each map closure.
-trombone_specs = [
+# Install the official SciBmad phase-trombone maps. The dnu values are tune
+# increments (turns); phase_trombone! performs the 2pi conversion internally.
+chapter12_trombone_specs = [
     (mlrf_6, DefExpr(()->CONTROLS.dnux_mlrf_6), DefExpr(()->CONTROLS.dnuy_mlrf_6)),
     (mlrr_6, DefExpr(()->CONTROLS.dnux_mlrr_6), DefExpr(()->CONTROLS.dnuy_mlrr_6)),
     (ip8,    DefExpr(()->CONTROLS.dnux_ip8),    DefExpr(()->CONTROLS.dnuy_ip8)),
@@ -196,9 +194,27 @@ trombone_specs = [
     (ip4,    DNUX_IP4,                           DNUY_IP4),
 ]
 
-for (element, dnux, dnuy) in trombone_specs
-    mark_trombone!(element, ring, dnux, dnuy)
+function chapter12_ring_element(ring, template)
+    idx = findfirst(candidate -> candidate === template, ring.line)
+    if isnothing(idx)
+        matches = findall(candidate -> candidate.name == template.name, ring.line)
+        length(matches) == 1 || error(
+            "Expected one ring element named $(template.name); found $(length(matches))."
+        )
+        idx = only(matches)
+    end
+    return ring.line[idx]
 end
+
+function install_chapter12_phase_trombones!(ring, specs=chapter12_trombone_specs)
+    for (template, dnu1, dnu2) in specs
+        element = chapter12_ring_element(ring, template)
+        phase_trombone!(element; phi1=dnu1, phi2=dnu2)
+    end
+    return ring
+end
+
+install_chapter12_phase_trombones!(ring)
 
 # Finally we need to define compensator families to keep chromaticity +1
 # 6 arcs * 2 families * 2 planes = 24 families total 
@@ -356,10 +372,11 @@ if !(@isdefined(CH12_W_OPTIMIZED_KNOBS_ITER7))
         OD_5 = -1.9941313963248843,
         OF_7 = -0.7056425776560357,
         OD_7 = 1.7937750928102283,
-        TROMBONE_X1 = 0.006670065623374273,
-        TROMBONE_X2 = 0.7723006173352076,
-        TROMBONE_Y1 = -0.900678844996547,
-        TROMBONE_Y2 = 0.5398947063177737,
+        # Official phase_trombone! inputs are tune shifts (turns), not radians.
+        TROMBONE_X1 = 0.00106157391470734,
+        TROMBONE_X2 = 0.12291546080182061,
+        TROMBONE_Y1 = -0.14334749031949948,
+        TROMBONE_Y2 = 0.08592691125962082,
     )
 end
 

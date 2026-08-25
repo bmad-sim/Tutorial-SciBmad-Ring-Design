@@ -103,11 +103,10 @@ tutorial stay valid. Before running a numbered chapter for the first time, open
 [`setup_environment.ipynb`](setup_environment.ipynb) and run all of its cells.
 
 The setup notebook activates the project, adds the General and Bmad Julia
-registries when they are missing, pins the SciBmad 0.5 Twiss implementation
-from PR #88 at commit `f213fdd1f8c99e832bb1041ff820a3f8cdc9bab8`, and installs the
-shared environment. The explicit pin is needed while the PR remains
-unregistered. The first run can take several minutes while packages and
-artifacts are downloaded and precompiled.
+registries when they are missing, pins the official SciBmad `v0.5.2` release,
+and installs the shared environment. Chapter 12 uses the dynamic-aperture and
+phase-trombone APIs introduced in that release. The first run can take several
+minutes while packages and artifacts are downloaded and precompiled.
 
 Run the setup notebook again only when:
 
