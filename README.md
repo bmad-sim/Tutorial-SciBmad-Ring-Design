@@ -1,9 +1,9 @@
-# SciBmad Ring Design Tutorial
+# Tutorial_SciBmad
 
-A ring design tutorial in SciBmad/Julia.
+`Tutorial_SciBmad` is a hands-on introduction to accelerator modeling,
+simulation, and optimization with SciBmad and Julia.
 
-This tutorial introduces SciBmad for the simulation and optimization of particle
-accelerators. The numbered Jupyter notebooks should be read in order. Together
+The numbered Jupyter notebooks should be read in order. Together
 they build an example storage ring similar to the Electron Storage Ring of the
 Electron-Ion Collider. The main tutorial text is followed by exercises, with
 example solutions provided for comparison. Readers are encouraged to try the
@@ -103,9 +103,10 @@ tutorial stay valid. Before running a numbered chapter for the first time, open
 [`setup_environment.ipynb`](setup_environment.ipynb) and run all of its cells.
 
 The setup notebook activates the project, adds the General and Bmad Julia
-registries when they are missing, and runs `Pkg.instantiate()` once for the
-shared environment. The first run can take several minutes while packages and
-artifacts are downloaded and precompiled.
+registries when they are missing, pins the official SciBmad `v0.5.2` release,
+and installs the shared environment. Chapter 12 uses the dynamic-aperture and
+phase-trombone APIs introduced in that release. The first run can take several
+minutes while packages and artifacts are downloaded and precompiled.
 
 Run the setup notebook again only when:
 

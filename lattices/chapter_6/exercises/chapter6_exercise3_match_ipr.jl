@@ -54,7 +54,7 @@ function ipr_residual_jacobian(k)
     descriptor = Descriptor(6, 2, 4, 1)
     dk = params(descriptor)
     residual = ipr_residual_with_knobs(k, descriptor, dk)
-    return vcat((parameter_gradient(r)' for r in residual)...)
+    return jac(residual)
 end
 
 # This low-beta line has several local minima. Starting from the independently

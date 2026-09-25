@@ -1,5 +1,4 @@
 ring = include(joinpath(@__DIR__, "..", "common", "esr-main-18GeV-1IP.jl"))
-include(joinpath(@__DIR__, "normalizing_map_trombone_utils.jl"))
 
 @kwdef mutable struct Controls
     # These are Union{TPS64,Float64} bc
@@ -31,7 +30,7 @@ include(joinpath(@__DIR__, "normalizing_map_trombone_utils.jl"))
     dksf2_11::Union{TPS64,Float64} = 0. # COMPENSATOR HORIZONTAL CHROM, defined near end
     dksd2_11::Union{TPS64,Float64} = 0. # COMPENSATOR VERTICAL CHROM, defined near end
             
-    # Horizontal trombones:
+    # Horizontal phase-trombone tune shifts, in turns (1 turn = 2pi radians):
     dnux_mlrf_6::Union{TPS64,Float64} = 0. 
     dnux_mlrr_6::Union{TPS64,Float64} = 0. 
     dnux_ip8::Union{TPS64,Float64}    = 0. 
@@ -39,7 +38,7 @@ include(joinpath(@__DIR__, "normalizing_map_trombone_utils.jl"))
     dnux_ip12::Union{TPS64,Float64}   = 0. 
     dnux_ip2::Union{TPS64,Float64}    = 0. 
             
-    # Vertical trombones
+    # Vertical phase-trombone tune shifts, in turns (1 turn = 2pi radians):
     dnuy_mlrf_6::Union{TPS64,Float64} = 0. 
     dnuy_mlrr_6::Union{TPS64,Float64} = 0. 
     dnuy_ip8::Union{TPS64,Float64}    = 0. 
@@ -183,10 +182,9 @@ for i in 1:2:length(sfs_11)-1
     sfs_11[i+1].Kn2 = DefExpr(()->KSF+CONTROLS.dksf2_11)
 end
 
-# Mark phase trombone locations. make_trombones! will later find all elements
-# with kind == "Trombone", compute one reference twiss with normalizing_map=true,
-# and capture the local A matrices in each element's transport_map closure.
-trombone_specs = [
+# Install the official SciBmad phase-trombone maps. The dnu values are tune
+# increments (turns); phase_trombone! performs the 2pi conversion internally.
+chapter12_trombone_specs = [
     (mlrf_6, DefExpr(()->CONTROLS.dnux_mlrf_6), DefExpr(()->CONTROLS.dnuy_mlrf_6)),
     (mlrr_6, DefExpr(()->CONTROLS.dnux_mlrr_6), DefExpr(()->CONTROLS.dnuy_mlrr_6)),
     (ip8,    DefExpr(()->CONTROLS.dnux_ip8),    DefExpr(()->CONTROLS.dnuy_ip8)),
@@ -196,9 +194,27 @@ trombone_specs = [
     (ip4,    DNUX_IP4,                           DNUY_IP4),
 ]
 
-for (element, dnux, dnuy) in trombone_specs
-    mark_trombone!(element, ring, dnux, dnuy)
+function chapter12_ring_element(ring, template)
+    idx = findfirst(candidate -> candidate === template, ring.line)
+    if isnothing(idx)
+        matches = findall(candidate -> candidate.name == template.name, ring.line)
+        length(matches) == 1 || error(
+            "Expected one ring element named $(template.name); found $(length(matches))."
+        )
+        idx = only(matches)
+    end
+    return ring.line[idx]
 end
+
+function install_chapter12_phase_trombones!(ring, specs=chapter12_trombone_specs)
+    for (template, dnu1, dnu2) in specs
+        element = chapter12_ring_element(ring, template)
+        phase_trombone!(element; phi1=dnu1, phi2=dnu2)
+    end
+    return ring
+end
+
+install_chapter12_phase_trombones!(ring)
 
 # Finally we need to define compensator families to keep chromaticity +1
 # 6 arcs * 2 families * 2 planes = 24 families total 
@@ -208,8 +224,9 @@ using GTPSA
 # 6 arcs * 2 families * 2 planes = 24 families total 
 # So 22 families free, 2 fix chromaticity
 using GTPSA
-# First order all, first order parameter, 3rd order cross terms
-dchrom = Descriptor([1,1,1,1,1,1], 3, ones(Int, 24), 1)
+# The tune coefficient linear in delta needs second order in the longitudinal
+# phase-space variable. RF is disabled so delta remains a coasting-beam variable.
+dchrom = Descriptor([1,1,1,1,1,2], 3, ones(Int, 24), 1)
 p = params(dchrom)
 CONTROLS.dksf1_1  = p[1]
 CONTROLS.dksf2_1  = p[2]
@@ -238,11 +255,12 @@ CONTROLS.dksd1_11 = p[22]
 CONTROLS.dksf2_11 = p[23]
 CONTROLS.dksd2_11 = p[24]
 
-tw = twiss(ring; at=[],GTPSA_descriptor=dchrom)
-chromx_grad = GTPSA.gradient(par(tw.tunes[1], 6)[[0,0,0,0,0,0,:]], include_params=true)[7:end]
-chromy_grad = GTPSA.gradient(par(tw.tunes[2], 6)[[0,0,0,0,0,0,:]], include_params=true)[7:end]
-Mfamilychrom = vcat(chromx_grad[1:end-2]', chromy_grad[1:end-2]')
-Mselfchrom = vcat(chromx_grad[end-1:end]', chromy_grad[end-1:end]')
+tw = twiss(ring; at=[], rf_on=false, cols=String[], GTPSA_descriptor=dchrom)
+chromx = tw.q1[delta=1, as_taylor_series=true]
+chromy = tw.q2[delta=1, as_taylor_series=true]
+chrom_jacobian = jac([chromx, chromy])
+Mfamilychrom = chrom_jacobian[:, 1:end-2]
+Mselfchrom = chrom_jacobian[:, end-1:end]
 
 # Reset controls back
 CONTROLS.dksf1_1  = 0.
@@ -354,10 +372,11 @@ if !(@isdefined(CH12_W_OPTIMIZED_KNOBS_ITER7))
         OD_5 = -1.9941313963248843,
         OF_7 = -0.7056425776560357,
         OD_7 = 1.7937750928102283,
-        TROMBONE_X1 = 0.006670065623374273,
-        TROMBONE_X2 = 0.7723006173352076,
-        TROMBONE_Y1 = -0.900678844996547,
-        TROMBONE_Y2 = 0.5398947063177737,
+        # Official phase_trombone! inputs are tune shifts (turns), not radians.
+        TROMBONE_X1 = 0.00106157391470734,
+        TROMBONE_X2 = 0.12291546080182061,
+        TROMBONE_Y1 = -0.14334749031949948,
+        TROMBONE_Y2 = 0.08592691125962082,
     )
 end
 

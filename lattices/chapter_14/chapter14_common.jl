@@ -100,13 +100,11 @@ end
 function reference_bunch(beamline, coordinates)
     coordinates = reshape(coordinates, 1, 6)
 
-    if hasproperty(beamline, :p_over_q_ref)
-        return Bunch(coordinates; species=beamline.species_ref, p_over_q_ref=beamline.p_over_q_ref)
-    elseif hasproperty(beamline, :R_ref)
-        return Bunch(coordinates; species=beamline.species_ref, R_ref=beamline.R_ref)
-    else
-        return Bunch(coordinates; species=beamline.species_ref)
-    end
+    return Bunch(
+        coordinates;
+        species=beamline.species_ref,
+        p_over_q_ref=beamline.p_over_q_ref,
+    )
 end
 
 function track_orbit(beamline; v0=zeros(6))

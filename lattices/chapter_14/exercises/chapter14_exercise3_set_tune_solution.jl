@@ -5,19 +5,6 @@ using LinearAlgebra
 
 const TUNE_DESCRIPTOR = Descriptor(6, 2, 2, 1)
 const DK_TUNE = params(TUNE_DESCRIPTOR)
-const ZERO6 = [0, 0, 0, 0, 0, 0]
-
-function tps_const(x)
-    try
-        return x[ZERO6]
-    catch
-        return x
-    end
-end
-
-optics_table(tw) = hasproperty(tw, :table) ? tw.table : tw
-parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
-
 function sliced_drift(name, L, n)
     return [Drift(name=@sprintf("%s_%02d", name, i), L=L / n) for i in 1:n]
 end
@@ -41,10 +28,23 @@ end
 
 function ring_tunes(k; knobs=nothing, descriptor=nothing, constants=true)
     ring = build_tune_ring(k; knobs=knobs)
-    tw = isnothing(descriptor) ? twiss(ring) : twiss(ring, GTPSA_descriptor=descriptor)
-    table = optics_table(tw)
-    tunes = [table.phi_1[end], table.phi_2[end]]
-    return constants ? tps_const.(tunes) : tunes
+    if isnothing(descriptor)
+        tw = twiss(ring; at=[], damping=false)
+        tunes = [tw.q1[], tw.q2[]]
+    else
+        tw = twiss(
+            ring;
+            at=[],
+            GTPSA_descriptor=descriptor,
+            as_taylor_series=true,
+            damping=false,
+        )
+        tunes = [
+            tw.q1[as_taylor_series=true],
+            tw.q2[as_taylor_series=true],
+        ]
+    end
+    return constants ? val.(tunes) : tunes
 end
 
 function tune_residual(k, target)
@@ -57,7 +57,7 @@ end
 
 function tune_jacobian(k, target)
     residual = tune_residual_with_knobs(k, target)
-    return vcat((parameter_gradient(r)' for r in residual)...)
+    return jac(residual)
 end
 
 function match_tunes(k0, target; max_iter=10, tolerance=1e-9)
@@ -87,14 +87,14 @@ function match_tunes(k0, target; max_iter=10, tolerance=1e-9)
 end
 
 function plot_beta_beating(k_design, k_model)
-    design_table = optics_table(twiss(build_tune_ring(k_design)))
-    model_table = optics_table(twiss(build_tune_ring(k_model)))
+    design_tw = twiss(build_tune_ring(k_design); cols=["beta1", "beta2"], damping=false)
+    model_tw = twiss(build_tune_ring(k_model); cols=["beta1", "beta2"], damping=false)
 
-    s = tps_const.(model_table.s)
-    beta_x_design = tps_const.(design_table.beta_1)
-    beta_y_design = tps_const.(design_table.beta_2)
-    beta_x_model = tps_const.(model_table.beta_1)
-    beta_y_model = tps_const.(model_table.beta_2)
+    s = model_tw.s
+    beta_x_design = design_tw.beta1
+    beta_y_design = design_tw.beta2
+    beta_x_model = model_tw.beta1
+    beta_y_model = model_tw.beta2
 
     beating_x = 100 .* (beta_x_model .- beta_x_design) ./ beta_x_design
     beating_y = 100 .* (beta_y_model .- beta_y_design) ./ beta_y_design
@@ -107,8 +107,8 @@ function plot_beta_beating(k_design, k_model)
         ylabel="beta beating [%]",
         title="Exercise 3: beta(model) - beta(design)",
     )
-    lines!(ax, s, beating_x; color=:royalblue3, linewidth=2, label="beta_1")
-    lines!(ax, s, beating_y; color=:darkorange2, linewidth=2, label="beta_2")
+    lines!(ax, s, beating_x; color=:royalblue3, linewidth=2, label="beta1")
+    lines!(ax, s, beating_y; color=:darkorange2, linewidth=2, label="beta2")
     axislegend(ax; position=:rt)
 
     ax2 = Axis(

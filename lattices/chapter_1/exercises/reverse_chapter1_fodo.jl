@@ -53,16 +53,13 @@ function linear_map_with_descriptor(beamline, d; x0=zeros(6))
     return M
 end
 
-parameter_gradient(x) = GTPSA.gradient(x, include_params=true)[7:end]
-tps_const(x) = try x[zeros(Int, 6)] catch; x end
-
 function stable_phase_advance(M2)
-    cos_mu = clamp(0.5 * tr(M2), -1.0, 1.0)
+    cos_mu = clamp(0.5 * (M2[1, 1] + M2[2, 2]), -1.0, 1.0)
     return acos(cos_mu)
 end
 
 function stable_phase_advance_with_params(M2)
-    cos_mu = 0.5 * tr(M2)
+    cos_mu = 0.5 * (M2[1, 1] + M2[2, 2])
     return acos(cos_mu)
 end
 
@@ -81,12 +78,12 @@ end
 
 function phase_residual(k)
     mu_x, mu_y = phase_advances_with_knobs(k)
-    return [tps_const(mu_x) - pi / 2, tps_const(mu_y) - pi / 2]
+    return [val(mu_x) - pi / 2, val(mu_y) - pi / 2]
 end
 
 function phase_residual_jacobian(k)
     mu_x, mu_y = phase_advances_with_knobs(k)
-    return vcat(parameter_gradient(mu_x)', parameter_gradient(mu_y)')
+    return jac([mu_x, mu_y])
 end
 
 function damped_least_squares(f, jacobian, x0; maxiter=40, tol=1e-12, lambda0=1e-3)
@@ -124,7 +121,7 @@ k_start = [0.4, -0.4]
 k_reverse = damped_least_squares(phase_residual, phase_residual_jacobian, k_start)
 kQF_arc_R, kQD_arc_R = k_reverse
 
-M_reverse = tps_const.(linear_map_with_descriptor(build_reverse_arc_fodo(kQF_arc_R, kQD_arc_R), d_reverse_knobs))
+M_reverse = val.(linear_map_with_descriptor(build_reverse_arc_fodo(kQF_arc_R, kQD_arc_R), d_reverse_knobs))
 mu_x = stable_phase_advance(M_reverse[1:2, 1:2])
 mu_y = stable_phase_advance(M_reverse[3:4, 3:4])
 

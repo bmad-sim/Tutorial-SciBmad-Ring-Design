@@ -82,7 +82,7 @@ function full_ir_residual_jacobian(k_ipr)
     descriptor = Descriptor(6, 2, 4, 1)
     dk = params(descriptor)
     residual = full_ir_residual_with_knobs(k_ipr, descriptor, dk)
-    return vcat((parameter_gradient(r)' for r in residual)...)
+    return jac(residual)
 end
 
 println("Loaded independently matched IPF and IPR strengths.")

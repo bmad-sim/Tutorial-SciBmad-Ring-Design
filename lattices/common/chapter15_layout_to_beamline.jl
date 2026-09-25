@@ -88,10 +88,6 @@ function chapter15_layout_to_beamline(
     return Beamline(elements; species_ref, E_ref)
 end
 
-function chapter15_beamline_twiss_table(ring; kwargs...)
-    return twiss(ring; kwargs...).table
-end
-
 function chapter15_find_stable_layout_twiss(
     layout;
     candidate_quad_scales=vcat(10.0 .^ range(-4, 0, length=17), -10.0 .^ range(-4, 0, length=17)),
@@ -102,8 +98,8 @@ function chapter15_find_stable_layout_twiss(
     for quad_scale in candidate_quad_scales
         ring = chapter15_layout_to_beamline(layout; quad_scale, kwargs...)
         try
-            table = chapter15_beamline_twiss_table(ring)
-            return (; quad_scale, ring, table)
+            tw = twiss(ring)
+            return (; quad_scale, ring, tw)
         catch err
             last_error = err
         end
