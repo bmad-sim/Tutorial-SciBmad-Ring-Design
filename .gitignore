@@ -5,3 +5,6 @@ PROJECT.md
 
 # Personal JupyterLab workspace state
 .jupyter/
+
+# Local historical tutorial backups
+/.local-backups/

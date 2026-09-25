@@ -1,6 +1,6 @@
-# SciBmad Tutorial
+# Tutorial_SciBmad
 
-`Tutorial-SciBmad` is a hands-on introduction to accelerator modeling,
+`Tutorial_SciBmad` is a hands-on introduction to accelerator modeling,
 simulation, and optimization with SciBmad and Julia.
 
 The numbered Jupyter notebooks should be read in order. Together
