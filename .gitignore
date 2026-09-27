@@ -8,3 +8,13 @@ PROJECT.md
 
 # Local historical tutorial backups
 /.local-backups/
+
+# Local validation reports and diagnostic runners (not tutorial content)
+/validation/
+/scripts/validate_*
+/scripts/check_*
+/scripts/run_notebook_code.ps1
+
+# Python validation caches
+__pycache__/
+*.py[cod]

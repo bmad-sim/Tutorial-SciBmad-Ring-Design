@@ -236,7 +236,9 @@ function tutorial_bmad_constructor(spec::TutorialBmadElement, instance_name; cir
         e2 = tutorial_bmad_get(attrs, "e2")
         return "SBend($name_arg, $L_arg, g_ref=$(tutorial_bmad_float(g)), Kn0=$(tutorial_bmad_float(g)), e1=$(tutorial_bmad_float(e1)), e2=$(tutorial_bmad_float(e2)))"
     elseif spec.kind == "rfcavity"
-        parts = ["RFCavity($name_arg", L_arg]
+        # Bmad RFCavity zero phase is the stable zero crossing above transition.
+        # SciBmad otherwise defaults to maximum acceleration.
+        parts = ["RFCavity($name_arg", L_arg, "zero_phase=PhaseRef.AboveTransition"]
         haskey(attrs, "voltage") && push!(parts, "voltage=$(tutorial_bmad_float(attrs["voltage"]))")
         if haskey(attrs, "harmon") && circumference !== nothing && circumference > 0
             push!(parts, "rf_frequency=$(tutorial_bmad_float(attrs["harmon"] * 299792458.0 / circumference))")
