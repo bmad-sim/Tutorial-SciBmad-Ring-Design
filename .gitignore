@@ -11,9 +11,7 @@ PROJECT.md
 
 # Local validation reports and diagnostic runners (not tutorial content)
 /validation/
-/scripts/validate_*
-/scripts/check_*
-/scripts/run_notebook_code.ps1
+/scripts/
 
 # Python validation caches
 __pycache__/
