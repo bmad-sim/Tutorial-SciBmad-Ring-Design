@@ -8,6 +8,7 @@
 #   1. builds the Chapter 5 ring with four FODORF cells at 10 o'clock;
 #   2. calculates Qz from the GTPSA one-turn tracking Jacobian;
 #   3. uses bisection to find the common RF0 voltage that gives Qz = 0.05.
+# The electron ring uses the stable above-transition RF zero crossing.
 
 using SciBmad
 using GTPSA
@@ -35,6 +36,7 @@ function make_FODORF_elements(voltage)
         L=RF_L,
         harmon=RF_HARMON,
         voltage=voltage,
+        zero_phase=PhaseRef.AboveTransition,
     )
     drf() = Drift(name="DRF", L=DRF_L)
 
@@ -106,8 +108,8 @@ function transfer_matrix_gtpsa(ring; x0=zeros(6))
 end
 
 function longitudinal_one_turn_matrix(ring)
-    # The RF phase used here makes the phase-space origin the synchronous
-    # closed orbit. GTPSA gives the local 2x2 longitudinal map directly:
+    # The above-transition zero phase makes the phase-space origin the
+    # synchronous closed orbit. GTPSA gives the local 2x2 longitudinal map:
     #
     #       [ z_final  ]       [ z_initial  ]
     #       [ pz_final ] = Mz * [ pz_initial ].
@@ -121,9 +123,9 @@ function synchrotron_tune(voltage)
 
     # For a stable oscillation, the eigenvalues are exp(+/- i*2*pi*Qz).
     # Using acos(trace(Mz)/2) returns the tune in the interval [0, 0.5].
-    cos_phase = clamp(tr(Mz) / 2, -1.0, 1.0)
-    Qz = acos(cos_phase) / (2pi)
-    stable = abs(tr(Mz) / 2) < 1
+    cos_phase = tr(Mz) / 2
+    stable = isfinite(cos_phase) && abs(cos_phase) < 1
+    Qz = stable ? acos(cos_phase) / (2pi) : NaN
     return Qz, Mz, stable
 end
 
@@ -132,14 +134,16 @@ function bracket_target(target; voltage_start=RF_VOLTAGE_START, growth=2.0, max_
     # the calculated tune is above the target.
     low = max(voltage_start / 100, 1.0)
     high = voltage_start
-    q_low = first(synchrotron_tune(low))
-    q_high = first(synchrotron_tune(high))
+    q_low, _, stable_low = synchrotron_tune(low)
+    q_high, _, stable_high = synchrotron_tune(high)
+    stable_low && stable_high || error("Initial voltage bracket includes an unstable longitudinal map.")
 
     for _ in 1:max_steps
         q_low <= target <= q_high && return low, high
         low, q_low = high, q_high
         high *= growth
-        q_high = first(synchrotron_tune(high))
+        q_high, _, stable_high = synchrotron_tune(high)
+        stable_high || error("Longitudinal map became unstable before bracketing Qz = $target.")
     end
     error("Could not bracket Qz = $target. Last result: Qz = $q_high at V = $high V.")
 end
@@ -157,7 +161,7 @@ function optimize_rf_voltage(target=TARGET_QZ; tune_tol=1e-10, max_iter=80)
         abs(qz - target) < tune_tol && return voltage
         qz < target ? (low = voltage) : (high = voltage)
     end
-    return (low + high) / 2
+    error("RF voltage bisection did not reach Qz = $target within $max_iter iterations.")
 end
 
 println("Initial RF setting:")
